@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Job Analyzer</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        body, html { margin: 0; padding: 0; background-color: #0f172a; color: white; scroll-behavior: smooth; }
+        #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; opacity: 0.4; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
+        .input-field { background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; color: white; transition: 0.3s; }
+        .input-field:focus { border-color: #3b82f6; outline: none; }
+        select.input-field option { background-color: #0f172a; }
+        .chart-btn { background: rgba(255, 255, 255, 0.1); border: 1px solid #3b82f6; color: white; padding: 8px 0; width: 100px; text-align: center; border-radius: 8px; transition: 0.3s; }
+        .chart-btn:hover, .chart-btn.active { background: #3b82f6; cursor: pointer; font-weight: bold; }
+        .analyzing-loader { display: none; }
+        .result-section { display: none; animation: fadeIn 0.5s ease-in; }
+        
+        #graph-placeholder { 
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0; 
+            display: flex; align-items: center; justify-content: center; 
+            color: #94a3b8; font-size: 1.1rem; text-align: center; 
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 10; 
+            border-radius: 0.5rem;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- MAIN ANALYZER -->
+    <div class="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 mb-2">AI Job Analyzer</h1>
+            <p class="text-slate-400 text-lg">Advanced Job Posting Authenticity Detector</p>
+        </header>
+
+        <div class="glass-panel rounded-2xl p-8 w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- INPUTS -->
+            <div class="space-y-6">
+                <div>
+                    <h2 class="text-xl font-semibold text-blue-300 mb-4">Job Details</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-1">Company Name <span class="text-red-500">*</span></label>
+                            <input type="text" id="company" placeholder="e.g. Google Inc." class="input-field w-full rounded-lg p-3">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-1">Job Type</label>
+                            <select id="jobtype" class="input-field w-full rounded-lg p-3">
+                                <option value="Full-time">Full-time</option>
+                                <option value="Part-time">Part-time</option>
+                                <option value="Contract">Contract</option>
+                                <option value="Internship">Internship</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-1">Job Description <span class="text-red-500">*</span></label>
+                            <textarea id="description" rows="6" placeholder="Paste description..." class="input-field w-full rounded-lg p-3"></textarea>
+                        </div>
+                        <button onclick="analyzeJob()" class="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 text-white font-bold py-3 rounded-lg transition transform hover:scale-[1.02]">Analyze Posting</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RESULTS -->
+            <div class="flex flex-col justify-center items-center min-h-[300px] bg-slate-800/30 rounded-xl p-4 relative border border-slate-700">
+                <div id="initial-state" class="text-center text-slate-500"><p>Waiting for data...</p></div>
+                <div id="loader" class="analyzing-loader text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-3"></div>
+                    <p class="text-blue-300 animate-pulse">Analyzing...</p>
+                </div>
+                <div id="result-container" class="result-section w-full h-full flex flex-col items-center">
+                    <h3 class="text-lg font-semibold text-slate-200 mb-2">Authenticity Probability</h3>
+                    <div class="relative w-full h-64">
+                        <canvas id="predictionChart"></canvas>
+                        <div id="graph-placeholder">Select a graph style below<br>to visualize the results</div>
+                    </div>
+                    <div class="flex space-x-4 mt-6 justify-center">
+                        <button onclick="changeGraph('pie', this)" class="chart-btn">Pie</button>
+                        <button onclick="changeGraph('doughnut', this)" class="chart-btn">Doughnut</button>
+                        <button onclick="changeGraph('bar', this)" class="chart-btn">Bar</button>
+                    </div>
+                    <div id="verdict-text" class="mt-6 text-xl font-bold text-center"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-12 text-slate-500 animate-bounce cursor-pointer text-center" onclick="document.getElementById('analytics').scrollIntoView()">
+            <p class="text-sm mb-2 uppercase tracking-wide font-semibold">View Analytics</p>
+            <svg class="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+        </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="analytics" class="relative z-10 min-h-screen flex flex-col items-center justify-center p-4 bg-slate-900">
+        <h2 class="text-3xl font-bold text-white mb-2">Global Scam Trends</h2>
+        <p class="text-slate-400 mb-8">Real-time analysis from database</p>
+        <div class="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div class="bg-white p-6 rounded-2xl shadow-xl text-slate-800"><h3 class="text-lg font-bold text-blue-600 mb-4 border-b pb-2">Daily Activity</h3><div class="relative h-64"><canvas id="dailyChart"></canvas></div></div>
+            <div class="bg-white p-6 rounded-2xl shadow-xl text-slate-800"><h3 class="text-lg font-bold text-blue-600 mb-4 border-b pb-2">Monthly Analysis</h3><div class="relative h-64"><canvas id="monthlyChart"></canvas></div></div>
+            <div class="bg-white p-6 rounded-2xl shadow-xl text-slate-800"><h3 class="text-lg font-bold text-blue-600 mb-4 border-b pb-2">Yearly Overview</h3><div class="relative h-64"><canvas id="yearlyChart"></canvas></div></div>
+        </div>
+        <div class="mt-12 text-center"><button onclick="loadAnalytics()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-3 rounded-full shadow-lg transition transform hover:scale-105">Refresh Dashboard Data</button></div>
+    </div>
+
+    <script>
+        // Background Animation
+        const canvas = document.getElementById('bg-canvas'), ctx = canvas.getContext('2d');
+        let width, height, points = [];
+        function resize() { width = window.innerWidth; height = window.innerHeight; canvas.width = width; canvas.height = height; }
+        window.addEventListener('resize', resize); resize();
+        class Point { constructor() { this.x = Math.random()*width; this.y = Math.random()*height; this.vx = (Math.random()-0.5)*0.5; this.vy = (Math.random()-0.5)*0.5; this.size = Math.random()*2+1; } update() { this.x+=this.vx; this.y+=this.vy; if(this.x<0||this.x>width) this.vx*=-1; if(this.y<0||this.y>height) this.vy*=-1; } draw() { ctx.fillStyle='#3b82f6'; ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fill(); } }
+        for(let i=0; i<60; i++) points.push(new Point());
+        function animate() { ctx.clearRect(0,0,width,height); ctx.strokeStyle='rgba(59,130,246,0.15)'; ctx.lineWidth=1;
+            for(let i=0; i<points.length; i++) { points[i].update(); points[i].draw(); for(let j=i+1; j<points.length; j++) { if(Math.sqrt((points[i].x-points[j].x)**2+(points[i].y-points[j].y)**2)<150) { ctx.beginPath(); ctx.moveTo(points[i].x,points[i].y); ctx.lineTo(points[j].x,points[j].y); ctx.stroke(); }}} requestAnimationFrame(animate); } animate();
+
+        // Analyzer Logic
+        let myChart = null, storedReal = 0, storedFake = 0;
+        let hasData = false;
+
+        async function analyzeJob() {
+            const desc = document.getElementById('description').value, comp = document.getElementById('company').value, type = document.getElementById('jobtype').value;
+            if(!desc || !comp) { alert("Please fill in required fields!"); return; }
+            document.getElementById('initial-state').style.display = 'none'; document.getElementById('result-container').style.display = 'none'; document.getElementById('loader').style.display = 'block';
+            
+            document.getElementById('graph-placeholder').style.display = 'flex'; 
+            document.getElementById('predictionChart').style.display = 'none'; 
+            
+            if(myChart) { myChart.destroy(); myChart = null; }
+            document.querySelectorAll('.chart-btn').forEach(btn => btn.classList.remove('active'));
+
+            try {
+                const res = await fetch('/predict', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({company:comp, description:desc, job_type:type}) });
+                const data = await res.json();
+                storedReal = data.real_prob; storedFake = data.fake_prob;
+                hasData = true; 
+                
+                document.getElementById('loader').style.display = 'none'; document.getElementById('result-container').style.display = 'flex';
+                const v = document.getElementById('verdict-text');
+                v.innerHTML = data.fake_prob > 50 ? `<span class="text-red-400">High Risk (${data.fake_prob}%)</span>` : `<span class="text-green-400">Likely Legitimate (${data.real_prob}%)</span>`;
+                loadAnalytics();
+            } catch(e) { console.error(e); alert("Server Error"); document.getElementById('loader').style.display = 'none'; }
+        }
+
+        function changeGraph(type, el) {
+            if(!hasData) return;
+            
+            document.getElementById('graph-placeholder').style.display = 'none';
+            document.getElementById('predictionChart').style.display = 'block';
+            
+            document.querySelectorAll('.chart-btn').forEach(btn => btn.classList.remove('active')); 
+            if(el) el.classList.add('active');
+            renderGraph(storedReal, storedFake, type);
+        }
+
+        function renderGraph(real, fake, type) {
+            const ctx = document.getElementById('predictionChart').getContext('2d');
+            if(myChart) myChart.destroy();
+            
+            let opts = { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { 
+                    legend: { 
+                        position: 'bottom', 
+                        labels: { color: 'white' } 
+                    } 
+                } 
+            };
+            
+            if(type === 'doughnut') opts.cutout = '60%';
+            
+            if(type === 'bar') {
+                opts.scales = { 
+                    y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: 'white' } }, 
+                    x: { ticks: { color: 'white' }, grid: { display: false } } 
+                };
+                
+                opts.plugins.legend.labels.generateLabels = function(chart) {
+                    return chart.data.labels.map((label, i) => ({
+                        text: label,
+                        fillStyle: chart.data.datasets[0].backgroundColor[i],
+                        strokeStyle: chart.data.datasets[0].backgroundColor[i],
+                        lineWidth: 0,
+                        hidden: false,
+                        index: i,
+                        fontColor: 'white' // Forced to White
+                    }));
+                };
+            }
+            
+            myChart = new Chart(ctx, { 
+                type: type, 
+                data: { 
+                    labels: ['Real', 'Fake'], 
+                    datasets: [{ 
+                        label: 'Probability %', 
+                        data: [real, fake], 
+                        backgroundColor: ['#22c55e', '#ef4444'], 
+                        borderWidth: 0 
+                    }] 
+                }, 
+                options: opts 
+            });
+        }
+
+        // Analytics Logic
+        let dailyChart, monthlyChart, yearlyChart;
+        async function loadAnalytics() {
+            try {
+                const res = await fetch('/stats'); const data = await res.json();
+                renderDaily(data.daily); renderMonthly(data.monthly); renderYearly(data.yearly);
+            } catch(e) { console.error("Analytics Error", e); }
+        }
+        function processData(rawData, key) {
+            if(!rawData) return {labels:[], real:[], fake:[]};
+            let labels = [...new Set(rawData.map(d => d[key]))];
+            let real = labels.map(l => (rawData.find(d => d[key]===l && d.verdict==='Real') || {count:0}).count);
+            let fake = labels.map(l => (rawData.find(d => d[key]===l && d.verdict==='Fake') || {count:0}).count);
+            return {labels, real, fake};
+        }
+        const whiteOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#1e293b' } } }, scales: { x: { ticks: { color: '#475569' } }, y: { beginAtZero: true, ticks: { color: '#475569' } } } };
+        function renderDaily(data) {
+            const ctx = document.getElementById('dailyChart').getContext('2d'), p = processData(data, 'date');
+            if(dailyChart) dailyChart.destroy();
+            dailyChart = new Chart(ctx, { type: 'line', data: { labels: p.labels, datasets: [{ label: 'Real', data: p.real, borderColor: '#22c55e', tension: 0.4 }, { label: 'Fake', data: p.fake, borderColor: '#ef4444', tension: 0.4 }] }, options: whiteOpts });
+        }
+        function renderMonthly(data) {
+            const ctx = document.getElementById('monthlyChart').getContext('2d'), p = processData(data, 'month');
+            if(monthlyChart) monthlyChart.destroy();
+            monthlyChart = new Chart(ctx, { type: 'line', data: { labels: p.labels, datasets: [{ label: 'Real', data: p.real, borderColor: '#22c55e', tension: 0.4 }, { label: 'Fake', data: p.fake, borderColor: '#ef4444', tension: 0.4 }] }, options: whiteOpts });
+        }
+        function renderYearly(data) {
+            const ctx = document.getElementById('yearlyChart').getContext('2d'), p = processData(data, 'year');
+            if(yearlyChart) yearlyChart.destroy();
+            yearlyChart = new Chart(ctx, { type: 'line', data: { labels: p.labels, datasets: [{ label: 'Real', data: p.real, borderColor: '#22c55e', tension: 0.4 }, { label: 'Fake', data: p.fake, borderColor: '#ef4444', tension: 0.4 }] }, options: whiteOpts });
+        }
+        loadAnalytics();
+    </script>
+</body>
+</html>
