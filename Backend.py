@@ -11,8 +11,8 @@ def get_db_connection():
         host="localhost",
         user="root",
         # ⚠️ UPDATE THIS WITH YOUR REAL MYSQL PASSWORD
-        password="D@rshini16r", 
-        database="fraud_guard"
+        password="", 
+        database=""
     )
 
 # --- 2. LOAD AI MODEL ---
@@ -44,7 +44,7 @@ def home():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    print("🔍 Analysis Request Received...") # Debug print
+    print("🔍 Analysis Request Received...") 
     if not model: return jsonify({'error': 'Model not loaded'}), 500
 
     data = request.json
@@ -101,7 +101,6 @@ def get_stats():
         return jsonify({'error': str(e)}), 500
 
 # --- 5. START SERVER ---
-# This block MUST be at the very bottom, NOT indented.
 if __name__ == '__main__':
     print("🚀 Starting Flask Server... Please wait...")
     app.run(debug=True)
